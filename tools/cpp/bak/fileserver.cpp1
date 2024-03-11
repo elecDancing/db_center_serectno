@@ -1,0 +1,121 @@
+/*
+ * 程序名：fileserver.cpp，文件传输的服务端。
+ * 作者：Prtrick
+*/
+#include "_public.h"
+using namespace idc;
+
+clogfile logfile;            // 服务程序的运行日志。
+ctcpserver tcpserver;  // 创建tcp通讯的服务端对象。
+
+void FathEXIT(int sig);  // 父进程退出函数。
+void ChldEXIT(int sig);  // 子进程退出函数。
+
+// 上传文件的主函数。
+void recvfilesmain();
+
+string strsendbuffer;   // 发送报文的buffer。
+string strrecvbuffer;    // 接收报文的buffer。
+
+int main(int argc,char *argv[])
+{
+    if (argc!=3)
+    {
+      printf("Using:./fileserver port logfile\n");
+      printf("Example:./fileserver 5005 /log/idc/fileserver.log\n"); 
+      printf("         /project/tools/bin/procctl 10 /project/tools/bin/fileserver 5005 /log/idc/fileserver.log\n\n\n"); 
+      return -1;
+    }
+
+    // 关闭全部的信号和输入输出。
+    // 设置信号,在shell状态下可用 "kill + 进程号" 正常终止些进程
+    // 但请不要用 "kill -9 +进程号" 强行终止
+    //closeioandsignal(false); 
+    signal(SIGINT,FathEXIT); signal(SIGTERM,FathEXIT);
+
+    if (logfile.open(argv[2])==false) { printf("logfile.open(%s) failed.\n",argv[2]); return -1; }
+
+    // 服务端初始化。
+    if (tcpserver.initserver(atoi(argv[1]))==false)
+    {
+      logfile.write("tcpserver.initserver(%s) failed.\n",argv[1]); return -1;
+    }
+
+    while (true)
+    {
+        // 等待客户端的连接请求。
+        if (tcpserver.accept()==false)
+        {
+            logfile.write("tcpserver.accept() failed.\n"); FathEXIT(-1);
+        }
+
+        logfile.write("客户端（%s）已连接。\n",tcpserver.getip());
+
+        if (fork()>0) { tcpserver.closeclient(); continue; }  // 父进程继续回到Accept()。
+   
+        // 子进程重新设置退出信号。
+        signal(SIGINT,ChldEXIT); signal(SIGTERM,ChldEXIT);
+
+        tcpserver.closelisten();
+
+        // 子进程与客户端进行通讯，处理业务。
+
+        recvfilesmain();  // 上传文件的主函数。
+
+        ChldEXIT(0);
+    }
+}
+
+// 父进程退出函数。
+void FathEXIT(int sig)  
+{
+    // 以下代码是为了防止信号处理函数在执行的过程中被信号中断。
+    signal(SIGINT,SIG_IGN); signal(SIGTERM,SIG_IGN);
+
+    logfile.write("父进程退出，sig=%d。\n",sig);
+
+    tcpserver.closelisten();    // 关闭监听的socket。
+
+    kill(0,15);     // 通知全部的子进程退出。
+
+    exit(0);
+}
+
+// 子进程退出函数。
+void ChldEXIT(int sig)  
+{
+    // 以下代码是为了防止信号处理函数在执行的过程中被信号中断。
+    signal(SIGINT,SIG_IGN); signal(SIGTERM,SIG_IGN);
+
+    logfile.write("子进程退出，sig=%d。\n",sig);
+
+    tcpserver.closeclient();    // 关闭客户端的socket。
+
+    exit(0);
+}
+
+// 上传文件的主函数。
+void recvfilesmain()
+{
+
+    while (true)
+    {
+        // 接收客户端的报文。
+        if (tcpserver.read(strrecvbuffer,60)==false)
+        {
+            logfile.write("tcpserver.read() failed.\n"); return;
+        }
+        logfile.write("strrecvbuffer=%s\n",strrecvbuffer.c_str());
+
+        // 处理心跳报文。
+        if (strrecvbuffer=="<activetest>ok</activetest>")
+        {
+            strsendbuffer="ok";
+            logfile.write("strsendbuffer=%s\n",strsendbuffer.c_str());
+            if (tcpserver.write(strsendbuffer)==false)
+            {
+                logfile.write("tcpserver.write() failed.\n"); return;
+            }
+        }
+    }
+}

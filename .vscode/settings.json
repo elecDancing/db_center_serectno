@@ -1,0 +1,19 @@
+{
+    "files.associations": {
+        "*.tcc": "cpp",
+        "fstream": "cpp",
+        "array": "cpp",
+        "istream": "cpp",
+        "limits": "cpp",
+        "ostream": "cpp",
+        "sstream": "cpp",
+        "streambuf": "cpp",
+        "tuple": "cpp",
+        "utility": "cpp",
+        "iosfwd": "cpp",
+        "iostream": "cpp",
+        "atomic": "cpp",
+        "condition_variable": "cpp"
+    },
+    "C_Cpp.errorSquiggles": "enabled"
+}
